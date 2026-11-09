@@ -16,7 +16,8 @@ export type CheckOutcome =
   | { readonly kind: "unknown" };
 
 export interface CheckResult {
-  readonly mandatory: boolean;
+  /** Check identifier from the TaskContract's verification command list. */
+  readonly id: string;
   readonly outcome: CheckOutcome;
   /** Defaults to true when no machine report is required/produced. */
   readonly reportReadable?: boolean;
@@ -37,6 +38,12 @@ export interface ReviewSignals {
 export interface VerdictInput {
   readonly policy: PolicyDecision;
   readonly mandatoryApprovalsSatisfied: boolean;
+  /**
+   * Ids of the checks the TaskContract declares mandatory. Authoritative:
+   * a declared mandatory check without a corresponding executed, readable
+   * result in `checks` yields "failed" (VER-003, specification 15.3).
+   */
+  readonly mandatoryChecks: readonly string[];
   readonly checks?: readonly CheckResult[];
   readonly changes?: ChangeSummary;
   readonly review?: ReviewSignals;
@@ -48,10 +55,13 @@ export function computeVerdict(input: VerdictInput): Verdict {
     return "blocked";
   }
 
-  // VER-003: a mandatory check that did not run, errored, timed out, has an
-  // unknown exit status, or produced an unreadable mandatory report.
-  for (const check of input.checks ?? []) {
-    if (!check.mandatory) continue;
+  // VER-003: a mandatory check declared by the TaskContract that is absent
+  // from the evidence, did not run, errored, timed out, has an unknown exit
+  // status, or produced an unreadable mandatory report.
+  const resultsById = new Map((input.checks ?? []).map((check) => [check.id, check]));
+  for (const id of input.mandatoryChecks) {
+    const check = resultsById.get(id);
+    if (!check) return "failed";
     if (check.outcome.kind === "exit" && check.outcome.code === 0) {
       if (check.reportReadable === false) return "failed";
       continue;

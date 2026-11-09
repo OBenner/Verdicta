@@ -78,7 +78,8 @@ describe("computeVerdict — precedence properties over the input domain", () =>
                   yield {
                     policy: { executionAllowed },
                     mandatoryApprovalsSatisfied,
-                    checks: [{ mandatory: true, outcome }],
+                    mandatoryChecks: ["check-1"],
+                    checks: [{ id: "check-1", outcome }],
                     changes: { changePolicy, hasDiff, forbiddenPathsModified },
                     review: {
                       nonAutomatableCriteriaRemaining: false,
@@ -114,10 +115,9 @@ describe("computeVerdict — precedence properties over the input domain", () =>
       if (computeVerdict(input) !== "passed") continue;
       expect(input.policy.executionAllowed).toBe(true);
       expect(input.mandatoryApprovalsSatisfied).toBe(true);
-      for (const check of input.checks ?? []) {
-        if (check.mandatory) {
-          expect(check.outcome).toEqual({ kind: "exit", code: 0 });
-        }
+      for (const id of input.mandatoryChecks) {
+        const check = (input.checks ?? []).find((candidate) => candidate.id === id);
+        expect(check?.outcome).toEqual({ kind: "exit", code: 0 });
       }
       expect(input.changes?.forbiddenPathsModified).toBe(false);
       expect(input.review?.warnings).toBe(false);
