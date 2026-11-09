@@ -46,10 +46,16 @@ Rules:
 - Conventional Commits gives us a uniform history and enables automated
   changelog and release tooling later.
 
-## 3. Branches and history
+## 3. Branches, worktrees, and history
 
 - Work happens on short-lived feature branches, not directly on the main
   branch.
+- **Each development task gets its own git worktree** created from an
+  up-to-date `main` (e.g. `git worktree add ../verdicta-wt/<task> -b
+feat/<task> main`). The primary checkout stays clean for other agents
+  and operators; parallel work never fights over one working tree.
+- A worktree is removed once its branch is merged and the user confirms
+  cleanup.
 - No `push --force`, no rebasing or rewriting published history, without an
   explicit request from the user.
 - No push at all without an explicit request — local commits are the
@@ -69,6 +75,26 @@ A PR (or a change presented for review) is ready when:
 4. Documentation and requirement references are updated in the same change.
 5. The diff contains no secrets, no large generated artifacts, and no
    unrelated files.
+
+## 4a. Pull request description standard
+
+PR descriptions are written **entirely in English**, with a Conventional
+Commits title, and follow this section structure (established with PR #1):
+
+1. **What was added** — what the change contains; a table for enumerations
+   (files, workflows, commands) is preferred over prose.
+2. **Key decisions** — design choices made within the task scope and their
+   rationale. Decisions beyond task scope are escalated to an ADR instead
+   of being buried here.
+3. **Checks (executed locally)** — only checks that were actually run,
+   with their real outcomes. Quoting `pnpm verify` output is the norm.
+4. **Known limitations** — what is deliberately not covered, risks, and
+   deferred work.
+5. **After merge** — follow-up actions the merge unlocks or requires
+   (branch protection settings, deployments), when applicable.
+
+Sections that are genuinely empty are omitted rather than filled with
+boilerplate — except _Checks_, which is mandatory.
 
 ## 5. Architecture decision records
 

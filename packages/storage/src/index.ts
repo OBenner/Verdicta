@@ -4,3 +4,4 @@
 export * from "./database.js";
 export * from "./runs.js";
 export * from "./transitions.js";
+export * from "./recovery-events.js";

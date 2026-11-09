@@ -46,6 +46,19 @@ const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX idx_transition_events_run ON transition_events(run_id)`,
     ],
   },
+  {
+    version: 2,
+    statements: [
+      `CREATE TABLE recovery_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL REFERENCES runs(id),
+        kind TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        recorded_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX idx_recovery_events_run ON recovery_events(run_id)`,
+    ],
+  },
 ];
 
 function currentVersion(db: DatabaseSync): number {

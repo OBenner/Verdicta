@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { Run } from "@verdicta/contracts";
 
-import { reconcileRun, type ObservedState } from "../src/reconciler.js";
+import { reconcileAll, reconcileRun, type ObservedState } from "../src/reconciler.js";
 
 const NOW = "2026-11-09T12:00:00.000Z";
 
@@ -146,5 +146,39 @@ describe("reconcileRun — safe resume", () => {
 
     expect(decision.kind).toBe("safe_to_resume");
     expect(decision.reason).toContain("no attempt started");
+  });
+});
+
+/**
+ * STATE-007 (6): discrepancies found during reconciliation are recorded as
+ * recovery events. reconcileAll produces exactly the actionable decisions
+ * for a set of runs — quiet runs produce nothing.
+ */
+describe("reconcileAll — actionable decisions only", () => {
+  it("returns decisions only for runs that need them", () => {
+    const terminal = makeRun({
+      id: "run-terminal",
+      status: "completed",
+      verdict: "passed",
+      terminalReason: "done",
+    });
+    const healthy = makeRun({ id: "run-healthy" }); // valid lease
+    const expired = makeRun({
+      id: "run-expired",
+      lease: { owner: "coordinator-1", expiresAt: "2026-11-09T11:55:00.000Z" },
+    });
+    const queued = makeRun({ id: "run-queued", status: "queued", lease: undefined });
+
+    const decisions = reconcileAll([terminal, healthy, expired, queued], NOTHING_OBSERVED, NOW);
+
+    expect(decisions.map((d) => d.runId).sort()).toEqual(["run-expired", "run-queued"]);
+    expect(decisions.find((d) => d.runId === "run-expired")?.kind).toBe("mark_needs_decision");
+    expect(decisions.find((d) => d.runId === "run-queued")?.kind).toBe("safe_to_resume");
+  });
+
+  it("returns an empty list when everything is quiet", () => {
+    const healthy = makeRun({ id: "run-healthy" });
+
+    expect(reconcileAll([healthy], NOTHING_OBSERVED, NOW)).toEqual([]);
   });
 });
