@@ -35,7 +35,10 @@ pnpm 12.18.0):
 
 ```text
 pnpm install        # install workspace dependencies
-pnpm verify         # format:check + lint + typecheck + test + build
+pnpm verify         # format:check + lint + build + typecheck + test
+                    # (build precedes typecheck/test: workspace packages
+                    # resolve each other via dist/, so a clean checkout
+                    # must build first)
 pnpm format         # normalize formatting before committing
 pnpm -r test        # tests only
 pnpm --filter @verdicta/web dev   # Web UI dev server (loopback)
