@@ -1,0 +1,14 @@
+Verdicta
+Copyright 2026 The Verdicta Authors
+
+This product includes software developed by the Verdicta project
+(https://github.com/OBenner/Verdicta), licensed under the
+Apache License, Version 2.0.
+
+Verdicta is an independent implementation. It is not a fork of any other
+project and does not include code, prompt files, storage schemas, or UI
+design from third-party prior-art projects.
+
+The name "Verdicta", the npm package names, the GitHub organization and
+repository names, and related domains are subject to a release-time
+availability check before the first public release.
