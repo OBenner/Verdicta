@@ -495,3 +495,400 @@ Logs are escaped as data in the Web UI and are not interpreted as HTML or
 Markdown with active content. External instructions cannot change the
 `TaskContract`, verifier commands, or policy. Changing these objects
 requires a local user action.
+
+## 10. Storage
+
+### 10.1 SQLite
+
+SQLite is the source of truth for:
+
+- tasks and contract versions;
+- runs, attempts, and leases;
+- approvals;
+- runtime/session identifiers;
+- artifact indexes;
+- final verdicts.
+
+A state transition and its associated event are written atomically.
+Migrations are versioned and tested for restoration from the previous
+schema.
+
+### 10.2 Artifact store
+
+Large logs, diffs, reports, and manifests are stored as files with SHA-256.
+SQLite holds the relative path, size, MIME type, and hash, but does not
+duplicate the full content.
+
+Paths inside the store do not depend on the location of the user's
+repository. A bundle can be moved and verified offline. Evidence is deleted
+only by an explicit retention/cleanup command, which never deletes the
+user's branch.
+
+### 10.3 Recovery
+
+At startup, the service reconciler:
+
+1. finds leases whose owner has expired;
+2. cross-checks records against real containers, sessions, and worktrees;
+3. does not start a duplicate while the fate of the previous attempt is
+   unknown;
+4. marks unconfirmed state as requiring a decision;
+5. resumes only safe idempotent operations;
+6. records all discrepancies in recovery events.
+
+## 11. Verdict computation rules
+
+The rule order is fixed:
+
+1. If policy forbids execution, or a mandatory approval was denied or is
+   missing — `blocked`.
+2. If a mandatory command was not run, exited with an error, exceeded its
+   timeout, or produced an unreadable mandatory report — `failed`.
+3. If forbidden paths were changed, a required diff is missing, or a diff
+   is present with `changePolicy=forbidden` — `failed`.
+4. If non-automatable acceptance criteria, warnings, or significant
+   limitations remain — `needs_review`.
+5. Only after all previous rules pass — `passed`.
+
+The rules are applied to the full set of results: any `blocked` or `failed`
+from a higher-priority rule cannot be hidden by a later successful rule. An
+infrastructure inability to obtain a trustworthy result finishes the Run
+with the technical status `failed`, not with a verdict about code quality.
+
+LLM review may add a finding or a `needs_review` recommendation, but it
+cannot:
+
+- turn a failed mandatory test into `passed`;
+- override a policy violation;
+- confirm a missing approval;
+- replace the independent execution of a command.
+
+## 12. User surfaces
+
+### 12.1 CLI
+
+Basic commands:
+
+```text
+verdicta serve
+verdicta doctor
+verdicta run
+verdicta status
+verdicta logs
+verdicta evidence
+verdicta approve
+verdicta deny
+verdicta cancel
+verdicta resume
+```
+
+The CLI supports human-readable and JSON output. Exit codes distinguish a
+usage error, an infrastructure failure, a policy refusal, and an
+unsuccessful verifier result. The CLI never writes state directly to
+SQLite.
+
+### 12.2 Web UI
+
+The MVP contains:
+
+- a list of tasks and runs;
+- a `TaskContract` creation form;
+- live status and an event stream;
+- an approvals queue;
+- the diff and changed files;
+- check results;
+- EvidenceBundle and limitations viewing;
+- cancel/resume/repair actions within the contract.
+
+The UI never marks a status "done" based on the agent's message. The
+technical status and the `Verdict` are visually distinct.
+
+### 12.3 MCP and Agent Plugin
+
+In the MVP, the agent may use external MCP servers for knowledge and tools.
+Verdicta's own MCP server with read/approval/task operations and an Agent
+Plugin composed of a Skill plus MCP configuration are added after the MVP
+as thin clients of the same API.
+
+No single universal binary plugin for all IDEs and agents is assumed. The
+core API is the universal part; each client gets a small adapter for its
+own extension model.
+
+## 13. Technology choices
+
+- **Language:** TypeScript.
+- **Service runtime:** Node.js 24.
+- **Monorepo:** pnpm workspace.
+- **Web UI:** React + Vite.
+- **Storage:** SQLite + content-addressed files.
+- **UI events:** SSE.
+- **Isolation:** Docker workers.
+- **Git:** a separate worktree and branch per run.
+- **License:** Apache-2.0.
+
+Preliminary module boundaries:
+
+```text
+apps/cli
+apps/server
+apps/web
+packages/contracts
+packages/application
+packages/storage
+packages/git-workspace
+packages/sandbox
+packages/runtime
+packages/verifier
+packages/evidence
+packages/policy
+packages/adapters
+```
+
+The Vercel AI SDK is acceptable in future model-backed extensions, and the
+Workflow SDK in a separate implementation of the orchestration port.
+Neither is required for the MVP, and neither may define the domain types.
+The core retains the ability to work without Vercel's network services and
+without its own model provider.
+
+## 14. MVP scope
+
+The MVP includes:
+
+- one local operator and one repository per task;
+- a queue of independent tasks without a dependency graph;
+- the application API, the CLI, and the Web UI;
+- `AgentRuntime` with ACP and headless CLI adapters;
+- reference profiles for at least two external agents: Codex and Claude
+  Code;
+- Kimi Code compatibility via ACP, declared only after the shared adapter
+  contract suite passes;
+- Docker and a git worktree for every attempt;
+- scoped secrets and network profiles;
+- approvals, limits, retry, repair, cancel, and crash recovery;
+- an independent verifier and a deterministic `Verdict`;
+- SQLite, EvidenceBundle, and offline hash verification;
+- WeKnora as an optional MCP knowledge source, without porting its modules
+  into Verdicta.
+
+Support for OpenCode and other agents is achieved through the same port but
+is declared only after the compatibility tests actually pass — not on the
+mere existence of a same-named adapter.
+
+## 15. MVP acceptance criteria
+
+### 15.1 Successful E2E
+
+On a fixture repository with a reproducible bug, an external agent creates
+a fix on a separate branch. Verdicta re-runs the tests, issues `passed`,
+preserves a verifiable bundle, and leaves the original branch unchanged.
+
+### 15.2 Failure cannot be declared success
+
+The agent reports "all checks passed", but a mandatory test fails on
+independent re-execution. The result is `failed`; the branch is preserved;
+no merge/push happens.
+
+### 15.3 No evidence — no passed
+
+A corrupted or missing mandatory report, an unknown exit status, and the
+inability to re-run a check never yield `passed`.
+
+### 15.4 Isolation
+
+A fixture tries to access the host home, the Docker socket, another
+worktree, and a forbidden network address. Access is blocked, the event is
+recorded in the evidence, and the main branch and neighboring runs are
+unchanged.
+
+### 15.5 Secrets
+
+A test secret canary is passed only to the worker. After completion, its
+value is absent from SQLite, regular logs, API responses, and the
+EvidenceBundle. Ephemeral credential files are deleted during cleanup.
+
+### 15.6 Cancellation
+
+During a long-running command, the user issues a cancel. After the grace
+period the container is stopped, the status is `cancelled`, the available
+diff/logs are preserved, and the next scheduler tick does not restart the
+task.
+
+### 15.7 Service restart
+
+The service is force-killed during preparation, execution, and
+verification. After startup, the reconciler creates no duplicates,
+distinguishes confirmed from unknown states, and allows a safe resume or
+cancel.
+
+### 15.8 Interface parity
+
+The same run can be created via the CLI, observed in the Web UI, and
+cancelled via the CLI. Both surfaces show the same technical status,
+verdict, and evidence identifiers. The next stage repeats this scenario via
+MCP and the Agent Plugin without changing the domain rules.
+
+## 16. Testing strategy
+
+### 16.1 Unit and property tests
+
+- a reducer for all allowed and forbidden Run transitions;
+- deterministic Verdict computation;
+- retry and approval policies;
+- path/network policy;
+- contract serialization and compatibility;
+- EvidenceBundle hashing and offline verification;
+- redaction and handling of binary/large logs.
+
+### 16.2 Adapter contract tests
+
+One set of scenarios runs against every runtime adapter: probe, start,
+structured events, approval, cancellation, resume, and version mismatch. An
+adapter is not considered supported if critical scenarios are skipped.
+
+### 16.3 Fault injection
+
+Mandatory failures:
+
+- the agent hangs;
+- the CLI returns an unknown format;
+- the process disappears without an exit event;
+- Docker exceeds the memory/PID limit;
+- a test exceeds its timeout;
+- the disk fills up during evidence writing;
+- SQLite is unavailable during a state transition;
+- the service dies after creating the worktree but before recording the
+  container id;
+- the service dies after a command finishes but before the verdict is
+  recorded;
+- the clock moves backwards;
+- a stale lease tries to finish a run now owned by another owner;
+- an agent session points at a different worktree;
+- the manifest or an individual artifact is corrupted.
+
+The expected behavior for every failure: no false `passed`, no unaccounted
+duplicate, and preserved diagnostics.
+
+### 16.4 E2E and comparative runs
+
+Independently created fixture repositories and repeatable scenarios are
+used — not a copied Auto-Claude implementation. The same set of tasks is
+run through at least two runtimes. Compared are not only successes but also
+the correctness of refusals, recovery, evidence preservation, and main
+branch immutability.
+
+## 17. Observability and operations
+
+`verdicta doctor` checks:
+
+- Node.js and a supported OS;
+- the Docker daemon and the ability to create a restricted container;
+- Git and worktree support;
+- availability of the SQLite/artifact store;
+- installed agent CLIs and their versions;
+- the supported authentication method;
+- network profiles;
+- the absence of unresolved recovery conflicts.
+
+Technical logs contain correlation IDs and run/attempt identifiers, but no
+secrets. The diagnostic command never changes state implicitly: repair is a
+separate explicit operation.
+
+## 18. Prior art and differentiation
+
+Verdicta does not claim uniqueness for the individual ideas of worktree
+isolation, evidence gates, or agent orchestration. Before implementation,
+comparative scenarios must include the following projects.
+
+### 18.1 Auto-Claude / Aperant
+
+Auto-Claude is the original reference point for Kanban, specifications,
+Planner/Coder/QA, and the desktop experience. The current upstream
+continues as Aperant under AGPL-3.0 and uses Electron with an external
+coding agent. Verdicta is an independent Apache-2.0 implementation with no
+copying of code, prompt files, storage schemas, or UI design.
+
+Verdicta's main distinction is an evidence-first control plane with
+independent re-execution of checks, a separate domain verdict, Docker
+workers, and equal CLI/Web/MCP surfaces. A desktop app and built-in role
+based agent workflows are out of MVP scope.
+
+Sources:
+
+- https://github.com/AndyMik90/Aperant
+- https://github.com/OBenner/Auto-Coding
+
+### 18.2 Runproof
+
+Runproof already implements a close baseline model: a coding agent or shell
+runs in its own worktree, the result is accepted only after the declared
+checks, history is stored in SQLite, and no merge is performed. It is
+mandatory prior art for Verdicta.
+
+Verdicta's target distinction is a persistent recoverable service, Docker
+isolation, an ACP/native/CLI capability model, an extended EvidenceBundle,
+approvals, several client surfaces, and a separate state-machine recovery.
+These distinctions are implementation requirements, not claims of
+uniqueness.
+
+Source: https://github.com/CAOShurong/runproof
+
+### 18.3 Gatewright
+
+Gatewright provides evidence-gated work tracking, file-first events, a live
+board, a worktree runner, approvals/triage, resume, a CLI, and MCP.
+Therefore Verdicta must not position itself as the first evidence-gated
+tracker or the first worktree runner.
+
+Verdicta's focus is the independent re-execution of checks after the agent,
+a content-addressed EvidenceBundle, a Docker security boundary, a
+deterministic verdict separated from the technical status, and a single
+durable control plane for different runtime adapters. During
+implementation, the overlap is re-compared on identical E2E scenarios.
+
+Source: https://libraries.io/npm/gatewright
+
+### 18.4 eve
+
+eve provides a composable agent/code extension model and authenticated
+tooling. Verdicta chooses a different boundary: it does not assemble a new
+agent from extensions but controls already-existing coding applications
+through runtime adapters and verifies their results independently.
+
+Source: https://eve.dev/docs/code-extension
+
+## 19. Naming and publication
+
+The working name, chosen by the user, is **Verdicta**; the CLI is
+`verdicta`.
+
+Before the first public release, a separate release check of npm package
+names, the GitHub organization/repository, domains, and trademarks is
+performed. A preliminary GitHub search is not considered a legal
+availability check of the name.
+
+The first publication contains the Apache-2.0 license text and an explicit
+statement of independence from Auto-Claude/Aperant. Referencing prior art
+does not imply borrowing their code or brands.
+
+## 20. Final architectural decisions
+
+1. Code is executed by an external coding agent, not by Verdicta.
+2. The core needs no model API key; the agent may require its own
+   authentication.
+3. The primary control channel is `AgentRuntime` via ACP/native
+   SDK/headless CLI.
+4. MCP serves knowledge, tools, and client access to the core, but does not
+   replace runtime control.
+5. The agent receives a `TaskContract`, not a stream of micro-commands.
+6. Every attempt gets a git worktree and a Docker worker.
+7. Verdicta independently re-runs the mandatory checks.
+8. `Run.status` and `Verdict` are separated.
+9. The final verdict is computed deterministically; an LLM cannot override
+   a failed gate.
+10. The result is a preserved local branch, a ChangeSet, an EvidenceBundle,
+    and a Verdict.
+11. Automatic merge/push is forbidden in the MVP.
+12. The primary product is a local service + CLI + Web UI; the Agent Plugin
+    and IDE extensions use the same API later.
+13. The source of truth is SQLite and hashed files; JSONL is an export.
+14. The project is independent and distributed under Apache-2.0.
