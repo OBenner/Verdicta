@@ -35,7 +35,10 @@ pnpm 12.18.0):
 
 ```text
 pnpm install        # install workspace dependencies
-pnpm verify         # format:check + lint + typecheck + test + build
+pnpm verify         # format:check + lint + build + typecheck + test
+                    # (build precedes typecheck/test: workspace packages
+                    # resolve each other via dist/, so a clean checkout
+                    # must build first)
 pnpm format         # normalize formatting before committing
 pnpm -r test        # tests only
 pnpm --filter @verdicta/web dev   # Web UI dev server (loopback)
@@ -63,6 +66,7 @@ Before modifying a subsystem, read the matching normative document:
 | Tests, verification claims, fault injection                | `docs/development/testing-and-verification.md`    |
 | Trust boundaries, Docker, secrets, network                 | `docs/development/security-and-secrets.md`        |
 | Commits, branches, PRs, ADRs                               | `docs/development/git-and-review.md`              |
+| Architect/implementer roles, fitness functions, gates      | `docs/development/architecture-governance.md`     |
 
 Architectural decisions are recorded as ADRs in `docs/adr/` using
 `docs/adr/template.md`.
