@@ -22,7 +22,10 @@ export type TransitionErrorCode =
   | "lease_missing"
   | "lease_expired"
   | "lease_owned_by_other"
-  | "verdict_required";
+  | "verdict_required"
+  | "terminal_reason_required";
+
+const TERMINAL_STATUSES: readonly RunStatus[] = ["completed", "cancelled", "failed"];
 
 export interface TransitionError {
   readonly code: TransitionErrorCode;
@@ -81,6 +84,21 @@ export function applyTransition(run: Run, to: RunStatus, ctx: TransitionContext)
         message: "Transition to completed requires a verdict",
       },
     };
+  }
+
+  // A terminal status without a recorded reason is unexplainable to the
+  // operator and to the reconciler.
+  if (TERMINAL_STATUSES.includes(to)) {
+    const reason = ctx.outcome?.terminalReason;
+    if (reason === undefined || reason.trim() === "") {
+      return {
+        ok: false,
+        error: {
+          code: "terminal_reason_required",
+          message: `Transition to ${to} requires a non-empty terminal reason`,
+        },
+      };
+    }
   }
 
   return {

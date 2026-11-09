@@ -146,13 +146,79 @@ describe("applyTransition — completed requires a verdict (STATE-001)", () => {
     const result = applyTransition(verifyingRun(), "completed", {
       owner: OWNER,
       now: NOW,
-      outcome: { verdict: "failed" },
+      outcome: { verdict: "failed", terminalReason: "mandatory test suite failed" },
     });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.run.status).toBe("completed");
       expect(result.run.verdict).toBe("failed");
+      expect(result.run.terminalReason).toBe("mandatory test suite failed");
+    }
+  });
+});
+
+/**
+ * Every terminal transition (completed, cancelled, failed) must record why
+ * the run ended — a terminal status without a reason is unexplainable to
+ * the operator and to the reconciler.
+ */
+describe("applyTransition — terminal transitions require a reason", () => {
+  const activeRun = () =>
+    makeRun({
+      status: "running",
+      lease: { owner: OWNER, expiresAt: "2026-11-09T12:05:00.000Z" },
+    });
+
+  it("rejects cancelled without a terminal reason", () => {
+    const result = applyTransition(activeRun(), "cancelling", { owner: OWNER, now: NOW });
+    expect(result.ok).toBe(true);
+
+    const cancelling = makeRun({
+      status: "cancelling",
+      lease: { owner: OWNER, expiresAt: "2026-11-09T12:05:00.000Z" },
+    });
+    const finished = applyTransition(cancelling, "cancelled", { owner: OWNER, now: NOW });
+
+    expect(finished.ok).toBe(false);
+    if (!finished.ok) {
+      expect(finished.error.code).toBe("terminal_reason_required");
+    }
+  });
+
+  it("rejects failed without a terminal reason", () => {
+    const result = applyTransition(activeRun(), "failed", { owner: OWNER, now: NOW });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("terminal_reason_required");
+    }
+  });
+
+  it("rejects an empty terminal reason", () => {
+    const result = applyTransition(activeRun(), "failed", {
+      owner: OWNER,
+      now: NOW,
+      outcome: { terminalReason: "   " },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("terminal_reason_required");
+    }
+  });
+
+  it("accepts a terminal transition with a reason and records it", () => {
+    const result = applyTransition(activeRun(), "failed", {
+      owner: OWNER,
+      now: NOW,
+      outcome: { terminalReason: "docker daemon unavailable" },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.run.status).toBe("failed");
+      expect(result.run.terminalReason).toBe("docker daemon unavailable");
     }
   });
 });
