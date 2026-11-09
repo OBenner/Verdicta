@@ -3,3 +3,4 @@
 
 export * from "./verdict.js";
 export * from "./run-machine.js";
+export * from "./run-coordinator.js";
