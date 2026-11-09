@@ -219,7 +219,11 @@ importers:
 
   packages/adapters: {}
 
-  packages/application: {}
+  packages/application:
+    dependencies:
+      '@verdicta/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/contracts: {}
 
@@ -233,7 +237,14 @@ importers:
 
   packages/sandbox: {}
 
-  packages/storage: {}
+  packages/storage:
+    dependencies:
+      '@verdicta/application':
+        specifier: workspace:*
+        version: link:../application
+      '@verdicta/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/verifier: {}
 
