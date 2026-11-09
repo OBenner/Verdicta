@@ -1,0 +1,4 @@
+# Normalize line endings to LF everywhere. Prettier (endOfLine: "lf",
+# the default since v3) fails format:check on CRLF working trees, which
+# is what Windows gets with core.autocrlf=true without this file.
+* text=auto eol=lf
