@@ -1,0 +1,9 @@
+# Default owner for everything
+* @OBenner
+
+# Architectural paths: require architectural review per
+# docs/development/architecture-governance.md (Layer 3)
+docs/adr/ @OBenner
+docs/development/ @OBenner
+packages/contracts/ @OBenner
+packages/application/ @OBenner
