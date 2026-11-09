@@ -15,20 +15,26 @@ observes execution, re-runs the mandatory checks independently, and produces:
 ChangeSet + EvidenceBundle + Verdict
 ```
 
-The canonical product specification is `Verdicta-проект.txt` (Russian) at the
-repository root. Where this file or any other document disagrees with that
-specification, the specification wins — report the conflict instead of
-silently resolving it.
+The canonical product specification is `docs/SPECIFICATION.md` (English,
+maintained artifact). The original Russian `Verdicta-проект.txt`
+(2026-11-09) is retained at the repository root as the historical source.
+Where this file or any other document disagrees with the specification, the
+specification wins — report the conflict instead of silently resolving it.
 
 License: Apache-2.0. Verdicta is an independent implementation and borrows
 no code, prompts, storage schemas, or UI design from third-party projects.
 
 ## Current phase
 
-**Scaffolded, pre-feature.** The pnpm workspace skeleton exists
-(`apps/*`, `packages/*`), `packages/contracts` holds the first domain types,
-and the automated gates are real. There is no Verdicta runtime behavior yet
-(server, coordinator, Docker, adapters are stubs).
+**Early feature phase.** The pnpm workspace skeleton exists
+(`apps/*`, `packages/*`) with real gates and CI. Implemented and tested:
+`packages/contracts` (domain types), `packages/application` (Run state
+machine, deterministic verdict rules, lease-guarded run coordinator,
+startup reconciler), `packages/storage` (SQLite persistence,
+migrations, atomic transitions). Still stubs: `apps/cli`, `apps/server`,
+`apps/web` (scaffold only), `packages/git-workspace`, `packages/sandbox`,
+`packages/runtime`, `packages/verifier`, `packages/evidence`,
+`packages/policy`, `packages/adapters`.
 
 Verified commands (executed successfully on 2026-11-09, Node v24.21.0,
 pnpm 12.18.0):
