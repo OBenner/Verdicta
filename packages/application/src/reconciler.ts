@@ -57,6 +57,20 @@ export function reconcileRun(run: Run, observed: ObservedState, now: string): Re
 }
 
 /**
+ * STATE-007 (6): classify a set of runs and return only the actionable
+ * decisions — these are what gets recorded as recovery events.
+ */
+export function reconcileAll(
+  runs: readonly Run[],
+  observed: ObservedState,
+  now: string,
+): readonly RecoveryDecision[] {
+  return runs
+    .map((run) => reconcileRun(run, observed, now))
+    .filter((decision) => decision.kind !== "no_action");
+}
+
+/**
  * STATE-007 (2, 3): cross-check the record against real containers.
  * Either way the attempt's fate is unknown — a duplicate start is
  * forbidden until a human decides.
