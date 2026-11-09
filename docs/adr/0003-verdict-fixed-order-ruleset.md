@@ -1,9 +1,10 @@
 # ADR-0003: Verdict computation as a fixed-order, closed ruleset
 
-- **Status:** proposed
+- **Status:** accepted (2026-11-09 — verified against the
+  `packages/application` verdict engine, including the VER-003 fix from
+  issue #4)
 - **Date:** 2026-11-09
-- **Deciders:** operator (pending acceptance with the `packages/application`
-  verdict engine implementation)
+- **Deciders:** operator, architect
 - **Related:** VER-001 … VER-007, STATE-001, STATE-002;
   product specification §5.3, §11; ADR-0001
 
