@@ -11,7 +11,14 @@ const NOW = "2026-11-09T12:00:00.000Z";
 const NOTHING_OBSERVED: ObservedState = {
   containerIds: [],
   worktreePaths: [],
-  sessionIds: [],
+  sessions: [],
+};
+
+/** Reality fully consistent with makeRun's default workspace. */
+const CONSISTENT_OBSERVED: ObservedState = {
+  containerIds: [],
+  worktreePaths: ["/w/run-1"],
+  sessions: [],
 };
 
 function makeRun(overrides: Partial<Run> = {}): Run {
@@ -52,7 +59,7 @@ describe("reconcileRun — no action needed", () => {
   it("returns no_action while the lease is still valid", () => {
     const run = makeRun(); // lease expires at 12:05, NOW is 12:00
 
-    const decision = reconcileRun(run, NOTHING_OBSERVED, NOW);
+    const decision = reconcileRun(run, CONSISTENT_OBSERVED, NOW);
 
     expect(decision.kind).toBe("no_action");
   });
@@ -120,14 +127,149 @@ describe("reconcileRun — cross-check with observed reality", () => {
     });
     const observed: ObservedState = {
       containerIds: ["container-abc"],
-      worktreePaths: [],
-      sessionIds: [],
+      worktreePaths: ["/w/run-1"],
+      sessions: [],
     };
 
     const decision = reconcileRun(run, observed, NOW);
 
     expect(decision.kind).toBe("mark_needs_decision");
     expect(decision.reason).toContain("still running");
+  });
+});
+
+/**
+ * STATE-007 (2): records are cross-checked against real worktrees and
+ * sessions too, not only containers — regardless of lease state. A record
+ * claiming an active attempt whose worktree or session is gone means the
+ * attempt's fate is unknown.
+ */
+describe("reconcileRun — worktree and session cross-checks", () => {
+  const validLease = { owner: "coordinator-1", expiresAt: "2026-11-09T12:05:00.000Z" };
+
+  it("marks an active run whose recorded worktree is gone, even with a valid lease", () => {
+    const run = makeRun({ lease: validLease });
+
+    const decision = reconcileRun(run, NOTHING_OBSERVED, NOW);
+
+    expect(decision.kind).toBe("mark_needs_decision");
+    expect(decision.reason).toContain("/w/run-1");
+    expect(decision.reason).toContain("not observed");
+  });
+
+  it("marks an active run whose recorded session is not observed", () => {
+    const run = makeRun({
+      lease: validLease,
+      workspace: {
+        worktreePath: "/w/run-1",
+        branch: "verdicta/run-1",
+        agentSessionId: "sess-1",
+      },
+    });
+    const observed: ObservedState = {
+      containerIds: [],
+      worktreePaths: ["/w/run-1"],
+      sessions: [],
+    };
+
+    const decision = reconcileRun(run, observed, NOW);
+
+    expect(decision.kind).toBe("mark_needs_decision");
+    expect(decision.reason).toContain("sess-1");
+    expect(decision.reason).toContain("not observed");
+  });
+
+  it("marks a session pointing at a foreign worktree (fault-injection scenario 12)", () => {
+    const run = makeRun({
+      lease: validLease,
+      workspace: {
+        worktreePath: "/w/run-1",
+        branch: "verdicta/run-1",
+        agentSessionId: "sess-1",
+      },
+    });
+    const observed: ObservedState = {
+      containerIds: [],
+      worktreePaths: ["/w/run-1"],
+      sessions: [{ id: "sess-1", worktreePath: "/w/foreign" }],
+    };
+
+    const decision = reconcileRun(run, observed, NOW);
+
+    expect(decision.kind).toBe("mark_needs_decision");
+    expect(decision.reason).toContain("sess-1");
+    expect(decision.reason).toContain("/w/foreign");
+    expect(decision.reason).toContain("/w/run-1");
+  });
+
+  it("marks an active run whose recorded container is gone, even with a valid lease", () => {
+    const run = makeRun({
+      lease: validLease,
+      workspace: {
+        worktreePath: "/w/run-1",
+        branch: "verdicta/run-1",
+        containerId: "container-abc",
+      },
+    });
+    const observed: ObservedState = {
+      containerIds: [],
+      worktreePaths: ["/w/run-1"],
+      sessions: [],
+    };
+
+    const decision = reconcileRun(run, observed, NOW);
+
+    expect(decision.kind).toBe("mark_needs_decision");
+    expect(decision.reason).toContain("container-abc");
+    expect(decision.reason).toContain("not observed");
+  });
+
+  it("returns no_action when lease and reality are fully consistent", () => {
+    const run = makeRun({
+      lease: validLease,
+      workspace: {
+        worktreePath: "/w/run-1",
+        branch: "verdicta/run-1",
+        containerId: "container-abc",
+        agentSessionId: "sess-1",
+      },
+    });
+    const observed: ObservedState = {
+      containerIds: ["container-abc"],
+      worktreePaths: ["/w/run-1"],
+      sessions: [{ id: "sess-1", worktreePath: "/w/run-1" }],
+    };
+
+    const decision = reconcileRun(run, observed, NOW);
+
+    expect(decision.kind).toBe("no_action");
+  });
+});
+
+/**
+ * Fault-injection scenario 8 (docs/development/testing-and-verification.md
+ * section 4): the service died after creating the worktree but before
+ * recording the container id. On restart the attempt's fate is unknown —
+ * a duplicate start is forbidden until a human decides.
+ */
+describe("reconcileRun — death after worktree creation, before container-id write", () => {
+  it("marks the run as needing a decision, never safe_to_resume", () => {
+    const run = makeRun({
+      status: "preparing",
+      lease: { owner: "coordinator-1", expiresAt: "2026-11-09T11:55:00.000Z" },
+      workspace: { worktreePath: "/w/run-1", branch: "verdicta/run-1" }, // no containerId
+    });
+    const observed: ObservedState = {
+      containerIds: [],
+      worktreePaths: ["/w/run-1"], // the worktree really exists
+      sessions: [],
+    };
+
+    const decision = reconcileRun(run, observed, NOW);
+
+    expect(decision.kind).toBe("mark_needs_decision");
+    expect(decision.reason).toContain("lease expired");
+    expect(decision.kind).not.toBe("safe_to_resume");
   });
 });
 
@@ -169,7 +311,7 @@ describe("reconcileAll — actionable decisions only", () => {
     });
     const queued = makeRun({ id: "run-queued", status: "queued", lease: undefined });
 
-    const decisions = reconcileAll([terminal, healthy, expired, queued], NOTHING_OBSERVED, NOW);
+    const decisions = reconcileAll([terminal, healthy, expired, queued], CONSISTENT_OBSERVED, NOW);
 
     expect(decisions.map((d) => d.runId).sort()).toEqual(["run-expired", "run-queued"]);
     expect(decisions.find((d) => d.runId === "run-expired")?.kind).toBe("mark_needs_decision");
@@ -179,6 +321,6 @@ describe("reconcileAll — actionable decisions only", () => {
   it("returns an empty list when everything is quiet", () => {
     const healthy = makeRun({ id: "run-healthy" });
 
-    expect(reconcileAll([healthy], NOTHING_OBSERVED, NOW)).toEqual([]);
+    expect(reconcileAll([healthy], CONSISTENT_OBSERVED, NOW)).toEqual([]);
   });
 });
