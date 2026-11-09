@@ -94,9 +94,7 @@ function collectTestSources(): string[] {
     }
   }
   const self = fileURLToPath(import.meta.url);
-  return files
-    .filter((file) => file !== self)
-    .map((file) => readFileSync(file, "utf8"));
+  return files.filter((file) => file !== self).map((file) => readFileSync(file, "utf8"));
 }
 
 function isReferenced(sources: string[], id: string): boolean {
@@ -130,9 +128,7 @@ describe("requirement traceability (architecture-governance.md Layer 1)", () => 
 
   it("no recorded exception is already covered by a test (remove it instead)", () => {
     const sources = collectTestSources();
-    const redundant = Object.keys(EXCEPTIONS).filter((id) =>
-      isReferenced(sources, id),
-    );
+    const redundant = Object.keys(EXCEPTIONS).filter((id) => isReferenced(sources, id));
 
     expect(
       redundant,
