@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+pnpm-lock.yaml
+*.log
+.idea
+
+# artifacts of other working sessions, not part of the scaffold
+docs/superpowers

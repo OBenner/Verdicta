@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm >= 11: build-script approval lives here (not in package.json).
+# Only packages that genuinely need a postinstall (native binary fetch)
+# are allowed. esbuild is required by Vite.
+allowBuilds:
+  esbuild: true
