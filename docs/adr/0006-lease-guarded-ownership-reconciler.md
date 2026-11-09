@@ -1,9 +1,10 @@
 # ADR-0006: Lease-guarded ownership and a startup reconciler for run lifecycle
 
-- **Status:** proposed
+- **Status:** accepted (2026-11-09 — verified against the lease-checked
+  transition API in `packages/storage` (#7) and the full STATE-007
+  reconciler with recovery events (#8, #14))
 - **Date:** 2026-11-09
-- **Deciders:** operator (pending acceptance with the run coordinator
-  implementation in `packages/application` / `apps/server`)
+- **Deciders:** operator, architect
 - **Related:** STATE-003, STATE-004, STATE-005, STATE-006, STATE-007,
   STATE-008; product specification §8, §10.3, §14; ADR-0001, ADR-0002
 
