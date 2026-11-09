@@ -133,3 +133,168 @@ describe("computeVerdict — precedence properties over the input domain", () =>
     }
   });
 });
+
+/**
+ * ADR-0003 fitness functions: the verdict ruleset is a pure, fixed-order,
+ * closed function over evidence — the same evidence must always yield the
+ * same verdict, and a later rule must never mask an earlier blocked/failed.
+ */
+describe("computeVerdict — ADR-0003 fixed-order ruleset properties", () => {
+  const allOutcomes: readonly CheckOutcome[] = [
+    { kind: "exit", code: 0 },
+    { kind: "exit", code: 1 },
+    { kind: "not_run" },
+    { kind: "timeout" },
+    { kind: "unknown" },
+  ];
+  const cleanOutcome: CheckOutcome = { kind: "exit", code: 0 };
+  const dirtyOutcomes = allOutcomes.filter(
+    (outcome) => !(outcome.kind === "exit" && outcome.code === 0),
+  );
+
+  function* richInputs(): Generator<VerdictInput> {
+    for (const executionAllowed of [true, false]) {
+      for (const mandatoryApprovalsSatisfied of [true, false]) {
+        for (const outcome of allOutcomes) {
+          for (const reportReadable of [true, false]) {
+            for (const changePolicy of ["required", "allowed", "forbidden"] as const) {
+              for (const hasDiff of [true, false]) {
+                for (const forbiddenPathsModified of [true, false]) {
+                  for (const nonAutomatableCriteriaRemaining of [true, false]) {
+                    for (const warnings of [true, false]) {
+                      for (const materialLimitations of [true, false]) {
+                        yield {
+                          policy: { executionAllowed },
+                          mandatoryApprovalsSatisfied,
+                          mandatoryChecks: ["check-1"],
+                          checks: [{ id: "check-1", outcome, reportReadable }],
+                          changes: { changePolicy, hasDiff, forbiddenPathsModified },
+                          review: {
+                            nonAutomatableCriteriaRemaining,
+                            warnings,
+                            materialLimitations,
+                          },
+                        };
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function isBlocked(input: VerdictInput): boolean {
+    return !input.policy.executionAllowed || !input.mandatoryApprovalsSatisfied;
+  }
+
+  function isCheckDirty(input: VerdictInput): boolean {
+    for (const id of input.mandatoryChecks) {
+      const check = (input.checks ?? []).find((candidate) => candidate.id === id);
+      if (!check) return true;
+      if (check.outcome.kind !== "exit" || check.outcome.code !== 0) return true;
+      if (check.reportReadable === false) return true;
+    }
+    return false;
+  }
+
+  function isChangeDirty(input: VerdictInput): boolean {
+    if (!input.changes) return false;
+    const { changePolicy, hasDiff, forbiddenPathsModified } = input.changes;
+    return (
+      forbiddenPathsModified ||
+      (changePolicy === "required" && !hasDiff) ||
+      (changePolicy === "forbidden" && hasDiff)
+    );
+  }
+
+  function isReviewDirty(input: VerdictInput): boolean {
+    if (!input.review) return false;
+    const { nonAutomatableCriteriaRemaining, warnings, materialLimitations } = input.review;
+    return nonAutomatableCriteriaRemaining || warnings || materialLimitations;
+  }
+
+  it("VER-006 determinism: the same evidence always yields the same verdict (ADR-0003 rule 3)", () => {
+    for (const input of richInputs()) {
+      const snapshot = structuredClone(input);
+      const first = computeVerdict(input);
+      const second = computeVerdict(input);
+      expect(second).toBe(first);
+      // Purity: the function must not mutate its evidence.
+      expect(input).toEqual(snapshot);
+    }
+  });
+
+  it("VER-003 masking: a dirty mandatory check yields failed regardless of later rules", () => {
+    for (const input of richInputs()) {
+      if (isBlocked(input)) continue;
+      if (!isCheckDirty(input)) continue;
+      expect(
+        computeVerdict(input),
+        `dirty check must not be masked by changes/review state: ${JSON.stringify(input.changes)} ${JSON.stringify(input.review)}`,
+      ).toBe("failed");
+    }
+  });
+
+  it("VER-003 fires for every non-clean outcome kind, not just exit!=0", () => {
+    for (const outcome of dirtyOutcomes) {
+      const input: VerdictInput = {
+        policy: { executionAllowed: true },
+        mandatoryApprovalsSatisfied: true,
+        mandatoryChecks: ["check-1"],
+        checks: [{ id: "check-1", outcome }],
+      };
+      expect(computeVerdict(input), `outcome ${outcome.kind}`).toBe("failed");
+    }
+  });
+
+  it("VER-003 fires when a declared mandatory check is absent from the evidence", () => {
+    const input: VerdictInput = {
+      policy: { executionAllowed: true },
+      mandatoryApprovalsSatisfied: true,
+      mandatoryChecks: ["check-1"],
+      checks: [{ id: "check-other", outcome: cleanOutcome }],
+    };
+    expect(computeVerdict(input)).toBe("failed");
+  });
+
+  it("VER-004 masking: change-policy violations yield failed, never needs_review (ADR-0003 rule 2)", () => {
+    for (const input of richInputs()) {
+      if (isBlocked(input) || isCheckDirty(input)) continue;
+      if (!isChangeDirty(input)) continue;
+      expect(computeVerdict(input)).toBe("failed");
+    }
+  });
+
+  it("VER-005 reaches needs_review only when every earlier gate is clean", () => {
+    let sawNeedsReview = false;
+    for (const input of richInputs()) {
+      if (computeVerdict(input) === "needs_review") {
+        sawNeedsReview = true;
+        expect(isBlocked(input)).toBe(false);
+        expect(isCheckDirty(input)).toBe(false);
+        expect(isChangeDirty(input)).toBe(false);
+        expect(isReviewDirty(input)).toBe(true);
+      }
+    }
+    expect(sawNeedsReview, "the enumeration must actually produce needs_review").toBe(true);
+  });
+
+  it("VER-006 biconditional: all gates clean iff passed", () => {
+    let sawPassed = false;
+    for (const input of richInputs()) {
+      const allClean =
+        !isBlocked(input) && !isCheckDirty(input) && !isChangeDirty(input) && !isReviewDirty(input);
+      if (allClean) {
+        sawPassed = true;
+        expect(computeVerdict(input)).toBe("passed");
+      } else {
+        expect(computeVerdict(input)).not.toBe("passed");
+      }
+    }
+    expect(sawPassed, "the enumeration must actually produce passed").toBe(true);
+  });
+});
