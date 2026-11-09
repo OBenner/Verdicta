@@ -19,17 +19,11 @@ on:
       - "tsconfig.base.json"
       - "eslint.config.js"
       - ".github/workflows/ci.yml"
+  # No path filter on pull_request: "CI Complete" is a required status
+  # check, so it must report on EVERY PR — a path filter would block any
+  # PR touching only non-matching paths (the check would never report).
   pull_request:
     branches: [main]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "tsconfig.base.json"
-      - "eslint.config.js"
-      - ".github/workflows/ci.yml"
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
