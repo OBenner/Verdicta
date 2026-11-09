@@ -14,6 +14,7 @@ describe("computeVerdict — VER-001 blocked", () => {
     const input: VerdictInput = {
       policy: { executionAllowed: false, reason: "network profile full requires approval" },
       mandatoryApprovalsSatisfied: true,
+      mandatoryChecks: [],
     };
 
     expect(computeVerdict(input)).toBe("blocked");
@@ -23,6 +24,7 @@ describe("computeVerdict — VER-001 blocked", () => {
     const input: VerdictInput = {
       policy: { executionAllowed: true },
       mandatoryApprovalsSatisfied: false,
+      mandatoryChecks: [],
     };
 
     expect(computeVerdict(input)).toBe("blocked");
@@ -43,7 +45,8 @@ describe("computeVerdict — VER-003 failed checks", () => {
   it("returns failed when a mandatory check exited non-zero", () => {
     const input: VerdictInput = {
       ...base,
-      checks: [{ mandatory: true, outcome: { kind: "exit", code: 1 } }],
+      mandatoryChecks: ["check-1"],
+      checks: [{ id: "check-1", outcome: { kind: "exit", code: 1 } }],
     };
 
     expect(computeVerdict(input)).toBe("failed");
@@ -52,7 +55,8 @@ describe("computeVerdict — VER-003 failed checks", () => {
   it("returns failed when a mandatory check was never run", () => {
     const input: VerdictInput = {
       ...base,
-      checks: [{ mandatory: true, outcome: { kind: "not_run" } }],
+      mandatoryChecks: ["check-1"],
+      checks: [{ id: "check-1", outcome: { kind: "not_run" } }],
     };
 
     expect(computeVerdict(input)).toBe("failed");
@@ -61,7 +65,8 @@ describe("computeVerdict — VER-003 failed checks", () => {
   it("returns failed when a mandatory check timed out", () => {
     const input: VerdictInput = {
       ...base,
-      checks: [{ mandatory: true, outcome: { kind: "timeout" } }],
+      mandatoryChecks: ["check-1"],
+      checks: [{ id: "check-1", outcome: { kind: "timeout" } }],
     };
 
     expect(computeVerdict(input)).toBe("failed");
@@ -70,7 +75,8 @@ describe("computeVerdict — VER-003 failed checks", () => {
   it("returns failed when a mandatory check's exit status is unknown", () => {
     const input: VerdictInput = {
       ...base,
-      checks: [{ mandatory: true, outcome: { kind: "unknown" } }],
+      mandatoryChecks: ["check-1"],
+      checks: [{ id: "check-1", outcome: { kind: "unknown" } }],
     };
 
     expect(computeVerdict(input)).toBe("failed");
@@ -79,9 +85,10 @@ describe("computeVerdict — VER-003 failed checks", () => {
   it("returns failed when a mandatory machine report is unreadable", () => {
     const input: VerdictInput = {
       ...base,
+      mandatoryChecks: ["check-1"],
       checks: [
         {
-          mandatory: true,
+          id: "check-1",
           outcome: { kind: "exit", code: 0 },
           reportReadable: false,
         },
@@ -89,6 +96,67 @@ describe("computeVerdict — VER-003 failed checks", () => {
     };
 
     expect(computeVerdict(input)).toBe("failed");
+  });
+});
+
+/**
+ * VER-003 / specification section 15.3 ("no evidence — no passed"): the
+ * engine receives the mandatory check list declared by the TaskContract.
+ * A declared mandatory check that has no executed, readable result in the
+ * evidence must yield "failed" — even when zero results were recorded at
+ * all, and even when every recorded result exited 0.
+ */
+describe("computeVerdict — VER-003 mandatory checks absent from evidence", () => {
+  const base = {
+    policy: { executionAllowed: true },
+    mandatoryApprovalsSatisfied: true,
+  } as const;
+
+  it("returns failed when a declared mandatory check has no recorded result at all", () => {
+    const input: VerdictInput = {
+      ...base,
+      mandatoryChecks: ["lint"],
+      checks: [],
+    };
+
+    expect(computeVerdict(input)).toBe("failed");
+  });
+
+  it("returns failed when only a subset of the declared mandatory checks ran", () => {
+    const input: VerdictInput = {
+      ...base,
+      mandatoryChecks: ["lint", "test", "typecheck"],
+      checks: [
+        { id: "lint", outcome: { kind: "exit", code: 0 } },
+        { id: "typecheck", outcome: { kind: "exit", code: 0 } },
+      ],
+    };
+
+    expect(computeVerdict(input)).toBe("failed");
+  });
+
+  it("returns failed when the recorded results cover only non-mandatory checks", () => {
+    const input: VerdictInput = {
+      ...base,
+      mandatoryChecks: ["test"],
+      checks: [{ id: "optional-benchmark", outcome: { kind: "exit", code: 0 } }],
+    };
+
+    expect(computeVerdict(input)).toBe("failed");
+  });
+
+  it("returns passed when every declared mandatory check ran clean", () => {
+    const input: VerdictInput = {
+      ...base,
+      mandatoryChecks: ["lint", "test"],
+      checks: [
+        { id: "lint", outcome: { kind: "exit", code: 0 } },
+        { id: "test", outcome: { kind: "exit", code: 0 } },
+        { id: "optional-benchmark", outcome: { kind: "exit", code: 1 } },
+      ],
+    };
+
+    expect(computeVerdict(input)).toBe("passed");
   });
 });
 
@@ -102,7 +170,8 @@ describe("computeVerdict — VER-004 change policy", () => {
   const base = {
     policy: { executionAllowed: true },
     mandatoryApprovalsSatisfied: true,
-    checks: [{ mandatory: true, outcome: { kind: "exit", code: 0 } }],
+    mandatoryChecks: ["check-1"],
+    checks: [{ id: "check-1", outcome: { kind: "exit", code: 0 } }],
   } as const;
 
   it("returns failed when changePolicy=required and the diff is empty", () => {
@@ -150,7 +219,8 @@ describe("computeVerdict — VER-005 needs_review", () => {
   const base = {
     policy: { executionAllowed: true },
     mandatoryApprovalsSatisfied: true,
-    checks: [{ mandatory: true, outcome: { kind: "exit", code: 0 } }],
+    mandatoryChecks: ["check-1"],
+    checks: [{ id: "check-1", outcome: { kind: "exit", code: 0 } }],
     changes: { changePolicy: "required", hasDiff: true, forbiddenPathsModified: false },
   } as const;
 
@@ -204,7 +274,8 @@ describe("computeVerdict — VER-006 passed and rule precedence", () => {
   const clean: VerdictInput = {
     policy: { executionAllowed: true },
     mandatoryApprovalsSatisfied: true,
-    checks: [{ mandatory: true, outcome: { kind: "exit", code: 0 } }],
+    mandatoryChecks: ["check-1"],
+    checks: [{ id: "check-1", outcome: { kind: "exit", code: 0 } }],
     changes: { changePolicy: "required", hasDiff: true, forbiddenPathsModified: false },
     review: {
       nonAutomatableCriteriaRemaining: false,
@@ -221,7 +292,8 @@ describe("computeVerdict — VER-006 passed and rule precedence", () => {
     const input: VerdictInput = {
       ...clean,
       mandatoryApprovalsSatisfied: false,
-      checks: [{ mandatory: true, outcome: { kind: "exit", code: 1 } }],
+      mandatoryChecks: ["check-1"],
+      checks: [{ id: "check-1", outcome: { kind: "exit", code: 1 } }],
     };
 
     expect(computeVerdict(input)).toBe("blocked");
@@ -230,7 +302,8 @@ describe("computeVerdict — VER-006 passed and rule precedence", () => {
   it("failed takes precedence over needs_review signals", () => {
     const input: VerdictInput = {
       ...clean,
-      checks: [{ mandatory: true, outcome: { kind: "timeout" } }],
+      mandatoryChecks: ["check-1"],
+      checks: [{ id: "check-1", outcome: { kind: "timeout" } }],
       review: {
         nonAutomatableCriteriaRemaining: true,
         warnings: true,
