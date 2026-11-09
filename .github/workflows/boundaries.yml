@@ -1,0 +1,63 @@
+# Boundaries — architectural gate for domain purity.
+#
+# AGENTS.md forbids ACP / MCP / vendor SDK types from leaking into the
+# domain types (TaskContract, Run, ChangeSet, EvidenceBundle, Verdict).
+# Those types live in packages/{contracts,application,evidence,policy},
+# so this workflow enforces that these packages' src trees import only:
+#   - relative paths ("./...", "../...")
+#   - other Verdicta packages ("@verdicta/...")
+#   - Node.js builtins ("node:...")
+# Any other bare specifier (an npm dependency) fails the gate.
+#
+# Implemented as a grep check rather than an eslint plugin to avoid
+# adding a dependency (new dependencies require operator approval).
+
+name: Boundaries
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/contracts/**"
+      - "packages/application/**"
+      - "packages/evidence/**"
+      - "packages/policy/**"
+      - ".github/workflows/boundaries.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/contracts/**"
+      - "packages/application/**"
+      - "packages/evidence/**"
+      - "packages/policy/**"
+      - ".github/workflows/boundaries.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check-boundaries:
+    name: Check import boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Forbid external imports in domain packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DIRS="packages/contracts/src packages/application/src packages/evidence/src packages/policy/src"
+
+          # All non-relative imports (bare specifiers) in the domain packages...
+          violations=$(grep -rnE '^\s*(import|export)\b[^;]*\bfrom\s+"[^".]' $DIRS --include='*.ts' \
+            | grep -vE 'from "(@verdicta/|node:)' || true)
+
+          if [[ -n "$violations" ]]; then
+            echo "::error::Domain packages must not import external packages (AGENTS.md):"
+            echo "$violations"
+            exit 1
+          fi
+
+          echo "Domain package boundaries are clean."
