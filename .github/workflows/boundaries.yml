@@ -23,14 +23,11 @@ on:
       - "packages/evidence/**"
       - "packages/policy/**"
       - ".github/workflows/boundaries.yml"
+  # No path filter on pull_request: "Check import boundaries" is a required
+  # status check, so it must report on EVERY PR — a path filter would block
+  # any PR touching only non-matching paths (the check would never report).
   pull_request:
     branches: [main]
-    paths:
-      - "packages/contracts/**"
-      - "packages/application/**"
-      - "packages/evidence/**"
-      - "packages/policy/**"
-      - ".github/workflows/boundaries.yml"
 
 permissions:
   contents: read
