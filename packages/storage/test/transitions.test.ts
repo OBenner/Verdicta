@@ -45,10 +45,10 @@ function makeEvent(overrides: Partial<TransitionEvent> = {}): TransitionEvent {
 describe("persistTransition — atomic status + event write", () => {
   it("persists the new run state and the event together", () => {
     const db = openDatabase(":memory:");
-    saveRun(db, makeRun());
+    saveRun(db, makeRun({ lease: VALID_LEASE }));
 
-    const newRun = makeRun({ status: "preparing", updatedAt: NOW });
-    persistTransition(db, newRun, makeEvent());
+    const newRun = makeRun({ status: "preparing", updatedAt: NOW, lease: VALID_LEASE });
+    persistTransition(db, newRun, makeEvent(), CTX);
 
     expect(getRun(db, "run-1")?.status).toBe("preparing");
     const events = listTransitionEvents(db, "run-1");
@@ -64,17 +64,96 @@ describe("persistTransition — atomic status + event write", () => {
 
   it("rolls back the run update when the event write fails", () => {
     const db = openDatabase(":memory:");
-    saveRun(db, makeRun());
+    saveRun(db, makeRun({ lease: VALID_LEASE }));
 
     // Event references a different run id: the FK violation must abort the
     // whole transaction, leaving the stored run untouched.
-    const newRun = makeRun({ status: "preparing", updatedAt: NOW });
+    const newRun = makeRun({ status: "preparing", updatedAt: NOW, lease: VALID_LEASE });
     const badEvent = makeEvent({ runId: "missing-run" });
 
-    expect(() => persistTransition(db, newRun, badEvent)).toThrow();
+    expect(() => persistTransition(db, newRun, badEvent, CTX)).toThrow();
 
     expect(getRun(db, "run-1")?.status).toBe("queued");
     expect(listTransitionEvents(db, "run-1")).toHaveLength(0);
+    db.close();
+  });
+});
+
+const VALID_LEASE = { owner: "coordinator-1", expiresAt: "2026-11-09T13:00:00.000Z" } as const;
+const CTX = { owner: "coordinator-1", now: NOW } as const;
+
+function catchTransitionError(fn: () => void): { code?: string; message: string } {
+  try {
+    fn();
+  } catch (error) {
+    return error as { code?: string; message: string };
+  }
+  throw new Error("Expected persistTransition to throw, but it succeeded");
+}
+
+/**
+ * STATE-003/STATE-004, ADR-0006 rule 1: storage re-verifies the lease
+ * against the stored run inside the same transaction as the write. A stale
+ * or foreign lease must abort the whole transaction — even when the
+ * in-memory Run was valid when the caller read it (TOCTOU).
+ */
+describe("persistTransition — lease-checked write (STATE-003/004)", () => {
+  it("rejects the write when the stored lease has expired", () => {
+    const db = openDatabase(":memory:");
+    saveRun(
+      db,
+      makeRun({ lease: { owner: "coordinator-1", expiresAt: "2026-11-09T11:59:59.000Z" } }),
+    );
+
+    const newRun = makeRun({ status: "preparing", updatedAt: NOW, lease: VALID_LEASE });
+    const error = catchTransitionError(() => persistTransition(db, newRun, makeEvent(), CTX));
+
+    expect(error.code).toBe("lease_expired");
+    expect(getRun(db, "run-1")?.status).toBe("queued");
+    expect(listTransitionEvents(db, "run-1")).toHaveLength(0);
+    db.close();
+  });
+
+  it("rejects the write when the stored lease changed owner after the caller read it", () => {
+    const db = openDatabase(":memory:");
+    // TOCTOU: the caller holds a valid-looking in-memory run, but another
+    // coordinator took over the lease before the write.
+    saveRun(
+      db,
+      makeRun({ lease: { owner: "coordinator-2", expiresAt: "2026-11-09T13:00:00.000Z" } }),
+    );
+
+    const newRun = makeRun({ status: "preparing", updatedAt: NOW, lease: VALID_LEASE });
+    const error = catchTransitionError(() => persistTransition(db, newRun, makeEvent(), CTX));
+
+    expect(error.code).toBe("lease_owned_by_other");
+    expect(getRun(db, "run-1")?.status).toBe("queued");
+    expect(listTransitionEvents(db, "run-1")).toHaveLength(0);
+    db.close();
+  });
+
+  it("rejects the write when the stored run has no lease", () => {
+    const db = openDatabase(":memory:");
+    saveRun(db, makeRun());
+
+    const newRun = makeRun({ status: "preparing", updatedAt: NOW, lease: VALID_LEASE });
+    const error = catchTransitionError(() => persistTransition(db, newRun, makeEvent(), CTX));
+
+    expect(error.code).toBe("lease_missing");
+    expect(getRun(db, "run-1")?.status).toBe("queued");
+    expect(listTransitionEvents(db, "run-1")).toHaveLength(0);
+    db.close();
+  });
+
+  it("persists status and event when the stored lease is valid for the caller", () => {
+    const db = openDatabase(":memory:");
+    saveRun(db, makeRun({ lease: VALID_LEASE }));
+
+    const newRun = makeRun({ status: "preparing", updatedAt: NOW, lease: VALID_LEASE });
+    persistTransition(db, newRun, makeEvent(), CTX);
+
+    expect(getRun(db, "run-1")?.status).toBe("preparing");
+    expect(listTransitionEvents(db, "run-1")).toHaveLength(1);
     db.close();
   });
 });
