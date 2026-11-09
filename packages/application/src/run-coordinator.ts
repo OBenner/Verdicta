@@ -25,6 +25,21 @@ export type TransitionErrorCode =
   | "verdict_required"
   | "terminal_reason_required";
 
+/**
+ * Domain event emitted by a successful transition. Storage persists the
+ * pair "status change + event" atomically (specification section 10.1).
+ */
+export interface TransitionEvent {
+  readonly runId: string;
+  readonly fromStatus: RunStatus;
+  readonly toStatus: RunStatus;
+  /** UTC ISO-8601, taken from the explicit context — never from the clock. */
+  readonly at: string;
+  readonly owner: string;
+  readonly verdict?: Verdict;
+  readonly terminalReason?: string;
+}
+
 const TERMINAL_STATUSES: readonly RunStatus[] = ["completed", "cancelled", "failed"];
 
 export interface TransitionError {
@@ -33,7 +48,7 @@ export interface TransitionError {
 }
 
 export type TransitionResult =
-  | { readonly ok: true; readonly run: Run }
+  | { readonly ok: true; readonly run: Run; readonly event: TransitionEvent }
   | { readonly ok: false; readonly error: TransitionError };
 
 export function applyTransition(run: Run, to: RunStatus, ctx: TransitionContext): TransitionResult {
@@ -107,6 +122,17 @@ export function applyTransition(run: Run, to: RunStatus, ctx: TransitionContext)
       ...run,
       status: to,
       updatedAt: ctx.now,
+      ...(ctx.outcome?.verdict !== undefined ? { verdict: ctx.outcome.verdict } : {}),
+      ...(ctx.outcome?.terminalReason !== undefined
+        ? { terminalReason: ctx.outcome.terminalReason }
+        : {}),
+    },
+    event: {
+      runId: run.id,
+      fromStatus: run.status,
+      toStatus: to,
+      at: ctx.now,
+      owner: ctx.owner,
       ...(ctx.outcome?.verdict !== undefined ? { verdict: ctx.outcome.verdict } : {}),
       ...(ctx.outcome?.terminalReason !== undefined
         ? { terminalReason: ctx.outcome.terminalReason }

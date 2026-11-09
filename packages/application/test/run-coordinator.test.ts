@@ -52,6 +52,55 @@ describe("applyTransition — happy path", () => {
   });
 });
 
+/**
+ * A successful transition yields a domain event alongside the new Run.
+ * Storage persists the pair "status change + event" atomically
+ * (specification section 10.1); the event is also what the reconciler and
+ * the evidence bundle consume later.
+ */
+describe("applyTransition — transition events", () => {
+  it("returns an event describing the transition", () => {
+    const result = applyTransition(makeRun(), "preparing", { owner: OWNER, now: NOW });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.event).toEqual({
+        runId: "run-1",
+        fromStatus: "queued",
+        toStatus: "preparing",
+        at: NOW,
+        owner: OWNER,
+      });
+    }
+  });
+
+  it("includes verdict and terminal reason in terminal events", () => {
+    const run = makeRun({
+      status: "cancelling",
+      lease: { owner: OWNER, expiresAt: "2026-11-09T12:05:00.000Z" },
+    });
+
+    const result = applyTransition(run, "cancelled", {
+      owner: OWNER,
+      now: NOW,
+      outcome: { terminalReason: "cancelled by operator" },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.event.toStatus).toBe("cancelled");
+      expect(result.event.terminalReason).toBe("cancelled by operator");
+    }
+  });
+
+  it("produces no event for a rejected transition", () => {
+    const result = applyTransition(makeRun(), "running", { owner: OWNER, now: NOW });
+
+    expect(result.ok).toBe(false);
+    expect("event" in result).toBe(false);
+  });
+});
+
 describe("applyTransition — invalid transitions are rejected", () => {
   it("rejects a transition the state machine forbids (queued → running)", () => {
     const result = applyTransition(makeRun(), "running", { owner: OWNER, now: NOW });
