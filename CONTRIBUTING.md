@@ -9,11 +9,10 @@ coding agent, read `AGENTS.md` first instead.
 
 ## Ground rules
 
-1. **The specification is the source of truth.** The product and
-   architecture specification lives at the repository root
-   (`Verdicta-проект.txt`, in Russian). The English documents under
-   `docs/development/` are normative working rules derived from it.
-   Conflicts must be reported, not silently resolved.
+1. **The specification is the source of truth.** The canonical product
+   specification is `docs/SPECIFICATION.md` (English). The original Russian
+   `Verdicta-проект.txt` is retained as the historical source. Conflicts must
+   be reported, not silently resolved.
 2. **Evidence over claims.** Never state that a check passed unless you
    actually ran it. This is the product's core principle and applies to its
    own development.
@@ -22,7 +21,7 @@ coding agent, read `AGENTS.md` first instead.
 4. **No automatic merge or push.** Not in the product, and not in its
    development workflow without an explicit request.
 
-## Repository layout (target)
+## Repository layout
 
 ```text
 apps/cli          — command-line client
@@ -34,9 +33,11 @@ docs/development/ — normative development rules
 docs/adr/         — architecture decision records
 ```
 
-The repository is scaffolded and pre-feature: the workspace layout above
-exists, the gates run, but Verdicta's runtime behavior is not implemented
-yet.
+The project is in the early feature phase. Domain contracts, the Run state
+machine, deterministic verdict rules, the lease-guarded coordinator, startup
+reconciler, and SQLite persistence are implemented and tested. The execution
+infrastructure, evidence pipeline, runtime adapters, server, and CLI remain
+stubs; the Web UI is a scaffold.
 
 ## Running the gates
 
@@ -44,15 +45,16 @@ Requirements: Node.js 24 and pnpm 12 (via corepack or a global install).
 
 ```text
 pnpm install        # install workspace dependencies
-pnpm verify         # format:check + lint + typecheck + test + build
+pnpm verify         # format:check + lint + build + typecheck + test
 pnpm format         # normalize formatting before committing
 pnpm -r test        # tests only
 pnpm --filter @verdicta/web dev   # Web UI dev server (loopback)
 ```
 
-Run `pnpm verify` before opening a PR and report its real output. A claim
-that checks passed without an actual run violates the project's core
-principle.
+Build precedes typecheck and tests because workspace packages resolve one
+another through `dist/`. Run `pnpm verify` before opening a PR and report its
+real output, including failures. A claim that checks passed without an actual
+run violates the project's core principle.
 
 ## Development rules
 
@@ -74,6 +76,13 @@ before touching the corresponding subsystem:
 Style rules that a formatter or linter can enforce are enforced by tools,
 not rewritten as prose. The documents explain principles; tooling enforces
 them.
+
+## Security reports
+
+Follow `SECURITY.md` for suspected vulnerabilities. Report them through the
+private GitHub Security Advisory channel, not public issues, pull requests,
+discussions, or commit comments. Remove credentials, private source code, and
+personal data from reproduction materials.
 
 ## Commits and pull requests
 

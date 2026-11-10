@@ -1,0 +1,57 @@
+name: Feature request
+description: Propose a capability or an improvement to an existing workflow
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Review `docs/SPECIFICATION.md` and `docs/ROADMAP.md` before proposing a change.
+        The specification is the canonical product contract; report any conflict instead of silently assuming a new rule.
+
+        **Do not use this form for security vulnerabilities.**
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and user scenario
+      description: Describe the user, the task they are trying to complete, and the limitation they currently face.
+      placeholder: "When I delegate ..., I cannot ..., which prevents ..."
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the observable behavior you want, without prescribing an implementation unless it is essential.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List verifiable conditions that would demonstrate the capability, including fail-closed behavior where relevant.
+      placeholder: |
+        - Given ..., when ..., then ...
+        - A missing or unreadable mandatory result never produces `passed`.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe workarounds or alternative approaches and their trade-offs.
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Scope and boundaries
+      description: Identify affected packages or interfaces, explicit non-goals, and any relation to an ADR or requirement ID.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked the canonical specification and roadmap for conflicts or existing plans.
+          required: true
+        - label: This proposal does not require automatic merge/push, host execution instead of Docker, or a model API key in the core.
+          required: true
+        - label: This is not a security vulnerability report.
+          required: true
