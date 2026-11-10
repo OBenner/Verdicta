@@ -1,0 +1,97 @@
+name: Bug report
+description: Report a reproducible problem in Verdicta
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not report security vulnerabilities here.**
+        Use a [private GitHub Security Advisory](https://github.com/OBenner/Verdicta/security/advisories/new) instead.
+
+        Remove credentials, private source code, personal data, and unredacted EvidenceBundles from all attachments.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      description: Select the component where the problem appears.
+      options:
+        - Application core
+        - Domain contracts
+        - SQLite storage
+        - Git workspace
+        - Docker sandbox
+        - AgentRuntime or adapter
+        - Verifier
+        - Evidence
+        - Policy
+        - Server API
+        - CLI
+        - Web UI
+        - Documentation
+        - CI or repository tooling
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Verdicta version or commit
+      description: Provide the release, commit SHA, or branch and revision you tested.
+      placeholder: "main at 0123456789abcdef"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the versions relevant to the reproduction.
+      placeholder: |
+        OS:
+        Node.js:
+        pnpm:
+        Docker:
+        Adapter and external agent version, if relevant:
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: List the exact steps and commands needed to reproduce the problem.
+      placeholder: |
+        1. Create or check out ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe what should have happened, referencing the specification or requirement ID when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Describe the observed result, including the Run status and Verdict separately when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Attach only the smallest useful logs, error codes, or command output. Do not include secrets or private repository content.
+      placeholder: "pnpm verify output, sanitized error output, or other relevant diagnostics"
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I reproduced the problem on the reported Verdicta revision.
+          required: true
+        - label: I removed secrets, private source code, personal data, and unredacted evidence from this report.
+          required: true
+        - label: This is not a security vulnerability report.
+          required: true

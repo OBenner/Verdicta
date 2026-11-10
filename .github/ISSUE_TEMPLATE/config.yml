@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/OBenner/Verdicta/security/advisories/new
+    about: Report suspected vulnerabilities privately through a GitHub Security Advisory. Do not open a public issue.
+  - name: Canonical product specification
+    url: https://github.com/OBenner/Verdicta/blob/main/docs/SPECIFICATION.md
+    about: Check the maintained product contract and MVP boundaries before proposing a change.
+  - name: Contributing guide
+    url: https://github.com/OBenner/Verdicta/blob/main/CONTRIBUTING.md
+    about: Read the development rules, required checks, and contribution process.
